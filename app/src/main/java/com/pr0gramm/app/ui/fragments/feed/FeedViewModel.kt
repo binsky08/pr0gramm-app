@@ -113,6 +113,12 @@ class FeedViewModel(
     private suspend fun observeSettings() {
         viewModelScope.launch {
             Settings.changes { showSeenItems }.collect { showSeen ->
+                // The flow has no initial value, so its first value can come from
+                // a change of any other setting. Ignore it if nothing changed.
+                if (showSeen == feedState.value.showSeen) {
+                    return@collect
+                }
+
                 // Hide all items that are seen at the time of the toggle.
                 feedState.update { previousState ->
                     previousState.copy(showSeen = showSeen, hiddenSeenIds = previousState.seen)
