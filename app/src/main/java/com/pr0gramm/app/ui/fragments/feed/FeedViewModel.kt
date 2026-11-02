@@ -72,6 +72,7 @@ class FeedViewModel(
             // correctly initialize the state
             feed = savedState.feed?.feed ?: Feed(filter, userService.selectedContentType),
             highlightedItemIds = savedState.highlightedItemIds?.toSet() ?: setOf(),
+            hiddenSeenIds = savedState.hiddenSeenIds?.toSet() ?: setOf(),
             ownUsername = userService.name,
         )
     )
@@ -200,7 +201,8 @@ class FeedViewModel(
 
                         val hiddenSeenIds = hiddenSeenIds(
                             itemIds = feed.map { it.id },
-                            knownIds = previousState.feed.filter { !it.placeholder }.mapTo(HashSet()) { it.id },
+                            // placeholders of a restored feed are known, their hidden state was restored too
+                            knownIds = previousState.feed.mapTo(HashSet()) { it.id },
                             previousHiddenIds = previousState.hiddenSeenIds,
                             seenIds = seen,
                             keepId = loadAroundItemId,
@@ -502,6 +504,7 @@ class FeedViewModel(
 
             savedState.feed = feedState.feed.parcelAroundId(itemId)
             savedState.highlightedItemIds = feedState.highlightedItemIds.toLongArray()
+            savedState.hiddenSeenIds = feedState.hiddenSeenIds.toLongArray()
             savedState.lastSavedId = itemId
         }
     }
@@ -550,6 +553,8 @@ class FeedViewModel(
         var feed: Feed.FeedParcel? by savedStateValue("feed")
 
         var highlightedItemIds: LongArray? by savedStateValue("highlightedItemIds")
+
+        var hiddenSeenIds: LongArray? by savedStateValue("hiddenSeenIds")
 
         var lastSavedId: Long by observeChangeEx(_lastSavedId) { oldValue, newValue ->
             if (oldValue != newValue) {
