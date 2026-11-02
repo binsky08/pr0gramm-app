@@ -580,6 +580,8 @@
     <string name="pref_highlight_items_in_feed">Highlight uploads</string>
     <string name="pref_highlight_items_in_feed_summary">Increase size of uploads with a high benis value in feed on mobile devices.</string>
     <string name="feed_hint_add_content_type">Add \'%s\' to your filter</string>
+    <string name="feed_hint_seen_items_hidden">You have already seen most posts on the last pages. They are hidden.</string>
+    <string name="feed_hint_load_more">Load more</string>
     <string name="action_scroll_to_top">Scroll to top</string>
     <string name="action_collapse_comments">Collapse comments</string>
     <string name="action_add_comment">Add comment</string>

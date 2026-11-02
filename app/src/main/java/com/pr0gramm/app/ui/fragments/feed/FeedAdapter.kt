@@ -48,6 +48,7 @@ class FeedAdapter
         delegates += SpacerEntryAdapter
         delegates += ErrorAdapterDelegate(R.layout.feed_error)
         delegates += MissingContentTypeEntryAdapter
+        delegates += LoadMoreHintEntryAdapter
         delegates += staticLayoutAdapterDelegate<Entry.PlaceholderItem>(R.layout.feed_item_view_placeholder)
         delegates += staticLayoutAdapterDelegate(R.layout.feed_hint_empty, Entry.EmptyHint)
         delegates += staticLayoutAdapterDelegate(R.layout.feed_hint_loading, Entry.LoadingHint)
@@ -106,6 +107,9 @@ class FeedAdapter
 
         data class PlaceholderItem(val itemId: Long)
             : Entry(idInCategory(11, itemId))
+
+        data class LoadMoreHint(val onLoadMore: () -> Unit)
+            : Entry(idInCategory(12))
     }
 
     inner class SpanSizeLookup(private val spanCount: Int) : GridLayoutManager.SpanSizeLookup() {
@@ -332,6 +336,22 @@ private object CommentEntryAdapter
                 )
             }
         }
+    }
+}
+
+private object LoadMoreHintEntryAdapter
+    : ListItemTypeAdapterDelegate<FeedAdapter.Entry.LoadMoreHint, FeedAdapter.Entry, LoadMoreHintEntryAdapter.ViewHolder>(FeedAdapter.Entry.LoadMoreHint::class) {
+
+    override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
+        return ViewHolder(parent.inflateDetachedChild<View>(R.layout.feed_hint_load_more))
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, value: FeedAdapter.Entry.LoadMoreHint) {
+        holder.button.setOnClickListener { value.onLoadMore() }
+    }
+
+    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val button = find<Button>(R.id.load_more_button)
     }
 }
 

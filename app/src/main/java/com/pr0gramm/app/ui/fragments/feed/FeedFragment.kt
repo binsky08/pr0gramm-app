@@ -439,6 +439,10 @@ class FeedFragment : BaseFragment("FeedFragment", R.layout.fragment_feed), Filte
 
                     feedState.empty ->
                         entries += FeedAdapter.Entry.EmptyHint
+
+                    // automatic loading stopped, let the user load more pages
+                    feedState.tooFewVisibleItems ->
+                        entries += FeedAdapter.Entry.LoadMoreHint(feedStateModel::triggerLoadNext)
                 }
             }
 

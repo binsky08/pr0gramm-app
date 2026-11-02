@@ -481,8 +481,7 @@ class FeedViewModel(
      * Then load the next page, but only a few pages in a row.
      */
     private fun loadMoreIfTooFewVisible() {
-        val state = feedState.value
-        if (!state.hidesSeenItems || state.isLoading || state.visibleFeed.size >= MIN_VISIBLE_ITEMS) {
+        if (!feedState.value.tooFewVisibleItems) {
             return
         }
 
@@ -591,6 +590,13 @@ class FeedViewModel(
         val visibleFeed: Feed by lazy(LazyThreadSafetyMode.NONE) {
             if (hidesSeenItems) feed.withoutItems(hiddenSeenIds) else feed
         }
+
+        /**
+         * True, if seen items hide most of the feed and more pages can be loaded.
+         */
+        val tooFewVisibleItems: Boolean
+            get() = hidesSeenItems && !isLoading && feed.isNotEmpty() && !feed.isAtEnd
+                    && visibleFeed.size < MIN_VISIBLE_ITEMS
     }
 
     companion object {

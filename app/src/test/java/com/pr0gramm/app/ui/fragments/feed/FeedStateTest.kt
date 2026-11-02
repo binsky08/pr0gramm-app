@@ -4,6 +4,7 @@ import com.pr0gramm.app.Instant
 import com.pr0gramm.app.feed.Feed
 import com.pr0gramm.app.feed.FeedFilter
 import com.pr0gramm.app.feed.FeedItem
+import com.pr0gramm.app.feed.FeedManager
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -63,15 +64,42 @@ class FeedStateTest {
         assertEquals(listOf(1L, 3L), state.visibleFeed.map { it.id })
     }
 
+    @Test
+    fun tooFewVisibleItemsIfMostAreHidden() {
+        val state = stateOf(FeedFilter(), showSeen = false, hiddenSeenIds = setOf(2))
+        assertTrue(state.tooFewVisibleItems)
+    }
+
+    @Test
+    fun notTooFewVisibleItemsIfSeenItemsAreShown() {
+        val state = stateOf(FeedFilter(), showSeen = true, hiddenSeenIds = setOf(2))
+        assertFalse(state.tooFewVisibleItems)
+    }
+
+    @Test
+    fun notTooFewVisibleItemsWhileLoading() {
+        val state = stateOf(FeedFilter(), showSeen = false, hiddenSeenIds = setOf(2), loading = FeedManager.LoadingSpace.NEXT)
+        assertFalse(state.tooFewVisibleItems)
+    }
+
+    @Test
+    fun notTooFewVisibleItemsAtTheEndOfTheFeed() {
+        val state = stateOf(FeedFilter(), showSeen = false, hiddenSeenIds = setOf(2), isAtEnd = true)
+        assertFalse(state.tooFewVisibleItems)
+    }
+
     private fun stateOf(
         filter: FeedFilter,
         showSeen: Boolean,
         hiddenSeenIds: Set<Long>,
-        ownUsername: String? = null
+        ownUsername: String? = null,
+        loading: FeedManager.LoadingSpace? = null,
+        isAtEnd: Boolean = false,
     ): FeedViewModel.FeedState {
         return FeedViewModel.FeedState(
             ready = true,
-            feed = Feed(filter, items = listOf(itemOf(1), itemOf(2), itemOf(3))),
+            feed = Feed(filter, items = listOf(itemOf(1), itemOf(2), itemOf(3)), isAtEnd = isAtEnd),
+            loading = loading,
             markItemsAsSeen = true,
             showSeen = showSeen,
             hiddenSeenIds = hiddenSeenIds,
