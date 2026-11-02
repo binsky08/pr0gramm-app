@@ -33,7 +33,8 @@ class PostPagerViewModel(
 
     var currentItem: FeedItem by observeChangeEx(savedState.currentItem) { _, newValue ->
         savedState.currentItem = newValue
-        savedState.fp = mutableState.value.feed.parcelAroundId(newValue.id)
+        val state = mutableState.value
+        savedState.fp = state.feed.parcelAroundId(newValue.id, state.hiddenSeenIds)
     }
 
     // initialize loader based on the input feed
@@ -103,7 +104,7 @@ class PostPagerViewModel(
 
     class SavedState(handle: SavedStateHandle, feed: Feed, initialItem: FeedItem, hiddenSeenIds: LongArray) : SavedStateAccessor(handle) {
         var currentItem: FeedItem by savedStateValue("currentItem", initialItem)
-        var fp: Feed.FeedParcel by savedStateValue("feed", feed.parcelAroundId(initialItem.id))
+        var fp: Feed.FeedParcel by savedStateValue("feed", feed.parcelAroundId(initialItem.id, hiddenSeenIds.toSet()))
         var hiddenSeenIds: LongArray by savedStateValue("hiddenSeenIds", hiddenSeenIds)
     }
 

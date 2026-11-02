@@ -312,7 +312,7 @@ class PostPagerFragment : BaseFragment("PostPagerFragment", R.layout.fragment_po
          */
         fun newInstance(feed: Feed, idx: Int, hiddenSeenIds: Set<Long>?, commentRef: CommentRef?, fragmentTitle: String?): PostPagerFragment {
             return PostPagerFragment().arguments {
-                putParcelable(ARG_FEED, feed.parcelAround(idx))
+                putParcelable(ARG_FEED, feed.parcelAround(idx, hiddenSeenIds.orEmpty()))
                 putLongArray(ARG_HIDDEN_SEEN_IDS, hiddenSeenIds?.toLongArray())
                 putParcelable(ARG_START_ITEM, feed[idx])
                 putParcelable(ARG_START_ITEM_COMMENT_REF, commentRef)

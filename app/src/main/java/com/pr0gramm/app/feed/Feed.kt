@@ -107,21 +107,42 @@ data class Feed(
         return "Feed(newest=${newestNonPlaceholderItem?.id}, oldest=${oldestNonPlaceholderItem?.id}, size=$size, filter=$filter)"
     }
 
-    fun parcelAroundId(itemId: Long): FeedParcel {
+    fun parcelAroundId(itemId: Long, hiddenIds: Set<Long> = setOf()): FeedParcel {
         val index = indexById(itemId) ?: 0
-        return parcelAround(index)
+        return parcelAround(index, hiddenIds)
     }
 
-    fun parcelAround(index: Int): FeedParcel {
+    /**
+     * Saves the items around the pivot item. Items in [hiddenIds] are saved too,
+     * but they do not count, so the window contains enough visible items.
+     */
+    fun parcelAround(index: Int, hiddenIds: Set<Long> = setOf()): FeedParcel {
+        val window = windowAround(index, hiddenIds)
+
+        // return a parcel with a window to the data
+        return FeedParcel(this, subset = copy(items = this.items.subList(window.first, window.last + 1)))
+    }
+
+    internal fun windowAround(index: Int, hiddenIds: Set<Long>): IntRange {
         // how many items to save to older and newer than the pivot item.
         val itemCountAround = 16
 
-        // add a subset of the items
-        val fromIndex = (index - itemCountAround).coerceIn(items.indices)
-        val toIndexExclusive = (index + itemCountAround).coerceIn(0, items.size)
+        var fromIndex = index.coerceIn(0, items.size)
+        var olderCount = 0
+        while (fromIndex > 0 && olderCount < itemCountAround) {
+            fromIndex--
+            if (items[fromIndex].id !in hiddenIds) olderCount++
+        }
 
-        // return a parcel with a window to the data
-        return FeedParcel(this, subset = copy(items = this.items.subList(fromIndex, toIndexExclusive)))
+        // the pivot item counts as one of the newer items
+        var toIndexExclusive = index.coerceIn(0, items.size)
+        var newerCount = 0
+        while (toIndexExclusive < items.size && newerCount < itemCountAround) {
+            if (items[toIndexExclusive].id !in hiddenIds) newerCount++
+            toIndexExclusive++
+        }
+
+        return fromIndex until toIndexExclusive
     }
 
     /**

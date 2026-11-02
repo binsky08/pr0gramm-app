@@ -1,9 +1,8 @@
 package com.pr0gramm.app.ui.fragments.feed
 
-import com.pr0gramm.app.Instant
 import com.pr0gramm.app.feed.Feed
 import com.pr0gramm.app.feed.FeedFilter
-import com.pr0gramm.app.feed.FeedItem
+import com.pr0gramm.app.feed.feedItemOf
 import com.pr0gramm.app.feed.FeedManager
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -98,37 +97,12 @@ class FeedStateTest {
     ): FeedViewModel.FeedState {
         return FeedViewModel.FeedState(
             ready = true,
-            feed = Feed(filter, items = listOf(itemOf(1), itemOf(2), itemOf(3)), isAtEnd = isAtEnd),
+            feed = Feed(filter, items = listOf(feedItemOf(1), feedItemOf(2), feedItemOf(3)), isAtEnd = isAtEnd),
             loading = loading,
             markItemsAsSeen = true,
             showSeen = showSeen,
             hiddenSeenIds = hiddenSeenIds,
             ownUsername = ownUsername,
-        )
-    }
-
-    private fun itemOf(id: Long): FeedItem {
-        return FeedItem(
-            created = Instant(0),
-            thumbnail = "",
-            path = "",
-            fullsize = "",
-            user = "",
-            userId = 0,
-            id = id,
-            promotedId = 0,
-            width = 1,
-            height = 1,
-            up = 0,
-            down = 0,
-            mark = 0,
-            flags = 1,
-            audio = false,
-            deleted = false,
-            repostApi = false,
-            variants = listOf(),
-            subtitles = listOf(),
-            placeholder = false,
         )
     }
 }
