@@ -407,7 +407,7 @@ class FeedFragment : BaseFragment("FeedFragment", R.layout.fragment_feed), Filte
 
                 var itemColumnIndex = 0
 
-                for (item in visibleFeedOf(feedState)) {
+                for (item in feedState.visibleFeed) {
                     val id = item.id
                     val seen = markAsSeen && id in feedState.seen
                     val repost = inMemoryCacheService.isRepost(id)
@@ -459,21 +459,8 @@ class FeedFragment : BaseFragment("FeedFragment", R.layout.fragment_feed), Filte
 
             feedAdapter.submitList(entries) {
                 feedAdapter.stateRestorationPolicy = StateRestorationPolicy.ALLOW
-
-                // If most items are hidden, the list can be too short to scroll. Then load more now.
-                val visibleCount = entries.count { it is FeedAdapter.Entry.Item }
-                if (!feedState.showSeen && !userState.userInfoCommentsOpen && visibleCount < 48 && !feedState.isLoading && !feedState.feed.isAtEnd) {
-                    feedStateModel.triggerLoadNext()
-                }
             }
         }
-    }
-
-    private fun visibleFeedOf(feedState: FeedViewModel.FeedState): Feed {
-        // never hide items in the feed of the own user
-        val ownUsername = userStateModel.userState.value.ownUsername
-        val isOwnFeed = ownUsername != null && ownUsername.equalsIgnoreCase(currentFilter.username)
-        return if (isOwnFeed) feedState.feed else feedState.visibleFeed
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -642,13 +629,13 @@ class FeedFragment : BaseFragment("FeedFragment", R.layout.fragment_feed), Filte
             autoScrollRef = ref.copy(feed = null)
 
             // apply the updated feed reference
-            feedStateModel.replaceCurrentFeed(feed.mergeIfPossible(ref.feed) ?: ref.feed)
+            feedStateModel.replaceCurrentFeed(feed.mergeIfPossible(ref.feed) ?: ref.feed, ref.hiddenSeenIds)
         }
     }
 
-    fun updateFeedItemTarget(feed: Feed, item: FeedItem) {
+    fun updateFeedItemTarget(feed: Feed, hiddenSeenIds: Set<Long>, item: FeedItem) {
         logger.info { "Want to resume from $item" }
-        autoScrollRef = ScrollRef(CommentRef(item), feed, smoothScroll = true)
+        autoScrollRef = ScrollRef(CommentRef(item), feed, hiddenSeenIds, smoothScroll = true)
     }
 
     private fun checkForNewItems() {
@@ -1027,8 +1014,8 @@ class FeedFragment : BaseFragment("FeedFragment", R.layout.fragment_feed), Filte
         // reset auto open.
         autoScrollRef = null
 
-        // the post pager shows the same items as the feed
-        val feed = visibleFeedOf(feedStateModel.feedState.value)
+        val feedState = feedStateModel.feedState.value
+        val feed = feedState.feed
 
         val idx = feed.indexById(item.id) ?: return
         trace { "onItemClicked(feedIndex=$idx, id=${item.id})" }
@@ -1044,7 +1031,10 @@ class FeedFragment : BaseFragment("FeedFragment", R.layout.fragment_feed), Filte
                 else -> currentTitle?.title
             }
 
-            val fragment = PostPagerFragment.newInstance(feed, idx, commentRef, title)
+            // the post pager hides the same items as the feed
+            val hiddenSeenIds = feedState.hiddenSeenIds.takeIf { feedState.hidesSeenItems }
+
+            val fragment = PostPagerFragment.newInstance(feed, idx, hiddenSeenIds, commentRef, title)
             if (preview != null) {
                 // pass pixels info to target fragment.
                 val image = preview.drawable

@@ -32,6 +32,7 @@ import com.pr0gramm.app.ui.fragments.CommentRef
 import com.pr0gramm.app.util.LazyStateFlow
 import com.pr0gramm.app.util.LongSparseArray
 import com.pr0gramm.app.util.StringException
+import com.pr0gramm.app.util.equalsIgnoreCase
 import com.pr0gramm.app.util.observeChangeEx
 import com.pr0gramm.app.util.rootCause
 import com.pr0gramm.app.util.trace
@@ -61,6 +62,7 @@ class FeedViewModel(
     private val itemQueries: FeedItemInfoQueries,
 ) : ViewModel() {
     private var hasRepostsInApi: Boolean= false
+    private var autoLoadsInRow = 0
     private val logger = Logger("FeedViewModel")
 
     val feedState = MutableStateFlow(
@@ -70,6 +72,7 @@ class FeedViewModel(
             // correctly initialize the state
             feed = savedState.feed?.feed ?: Feed(filter, userService.selectedContentType),
             highlightedItemIds = savedState.highlightedItemIds?.toSet() ?: setOf(),
+            ownUsername = userService.name,
         )
     )
 
@@ -80,6 +83,7 @@ class FeedViewModel(
         viewModelScope.launch { observeSeenService() }
         viewModelScope.launch { observeSettings() }
         viewModelScope.launch { observePreloadState() }
+        viewModelScope.launch { observeLoginState() }
 
         val placeholderCount = savedState.feed.orEmpty().count { it.placeholder }
         if (placeholderCount > 0) {
@@ -100,6 +104,12 @@ class FeedViewModel(
         }
     }
 
+    private suspend fun observeLoginState() {
+        userService.loginStates.collect { loginState ->
+            feedState.update { previousState -> previousState.copy(ownUsername = loginState.name) }
+        }
+    }
+
     private suspend fun observeSettings() {
         viewModelScope.launch {
             Settings.changes { showSeenItems }.collect { showSeen ->
@@ -107,6 +117,9 @@ class FeedViewModel(
                 feedState.update { previousState ->
                     previousState.copy(showSeen = showSeen, hiddenSeenIds = previousState.seen)
                 }
+
+                autoLoadsInRow = 0
+                loadMoreIfTooFewVisible()
             }
         }
 
@@ -199,6 +212,10 @@ class FeedViewModel(
                             missingContentType = null,
                             loading = null,
                         )
+                    }
+
+                    if (update.remote) {
+                        loadMoreIfTooFewVisible()
                     }
                 }
 
@@ -410,34 +427,68 @@ class FeedViewModel(
         }
     }
 
-    fun replaceCurrentFeed(feed: Feed) {
-        feedState.update { previousState -> previousState.copy(feed = feed) }
+    /**
+     * Replaces the feed with the one from the post pager. The pager hides seen items
+     * the same way, so we also take over the items it has hidden.
+     */
+    fun replaceCurrentFeed(feed: Feed, hiddenSeenIds: Set<Long>) {
+        feedState.update { previousState ->
+            previousState.copy(feed = feed, hiddenSeenIds = previousState.hiddenSeenIds + hiddenSeenIds)
+        }
     }
 
     fun restart(feed: Feed, aroundItemId: Long?) {
+        autoLoadsInRow = 0
         loader.reset(feed)
         loader.restart(around = aroundItemId)
     }
 
     fun refresh() {
+        autoLoadsInRow = 0
         loader.reset()
         loader.restart()
     }
 
     fun triggerLoadNext() {
+        autoLoadsInRow = 0
+        loadNext()
+    }
+
+    fun triggerLoadPrev() {
+        autoLoadsInRow = 0
+
+        if (loader.previous()) {
+            feedState.update { previousState ->
+                previousState.copy(loading = FeedManager.LoadingSpace.PREV)
+            }
+        }
+    }
+
+    private fun loadNext(): Boolean {
+        if (!loader.next()) {
+            return false
+        }
+
         feedState.update { previousState ->
             previousState.copy(loading = FeedManager.LoadingSpace.NEXT)
         }
 
-        loader.next()
+        return true
     }
 
-    fun triggerLoadPrev() {
-        feedState.update { previousState ->
-            previousState.copy(loading = FeedManager.LoadingSpace.PREV)
+    /**
+     * If most items are hidden, the visible feed can be too short to scroll.
+     * Then load the next page, but only a few pages in a row.
+     */
+    private fun loadMoreIfTooFewVisible() {
+        val state = feedState.value
+        if (!state.hidesSeenItems || state.isLoading || state.visibleFeed.size >= MIN_VISIBLE_ITEMS) {
+            return
         }
 
-        loader.previous()
+        if (autoLoadsInRow < MAX_AUTO_LOADS_IN_ROW && loadNext()) {
+            autoLoadsInRow++
+        }
     }
 
     fun updateScrollItemId(itemId: Long) {
@@ -453,15 +504,11 @@ class FeedViewModel(
     suspend fun findNextWith(matcher: (state: FeedState, itemId: Long) -> Boolean): FeedItem? {
         return feedState
             .flatMapConcat { feedState ->
-                val targetItem = feedState.feed.firstOrNull { item ->
+                val targetItem = feedState.visibleFeed.firstOrNull { item ->
                     matcher(feedState, item.id) && !item.isPinned
                 }
 
                 when {
-                    feedState.feed.isEmpty() && feedState.feed.isAtEnd -> {
-                        flowOf(feedState.feed.lastOrNull())
-                    }
-
                     feedState.feed.size > 4000 -> {
                         // no result within the first few pages
                         throw StringException(
@@ -472,6 +519,11 @@ class FeedViewModel(
 
                     targetItem != null -> {
                         flowOf(targetItem)
+                    }
+
+                    feedState.feed.isAtEnd -> {
+                        // nothing more to load
+                        flowOf(null)
                     }
 
                     !feedState.isLoading -> {
@@ -514,6 +566,7 @@ class FeedViewModel(
         val markItemsAsSeen: Boolean = Settings.markItemsAsSeen,
         val showSeen: Boolean = Settings.showSeenItems,
         val hiddenSeenIds: Set<Long> = setOf(),
+        val ownUsername: String? = null,
         val preloadedItemIds: LongSparseArray<PreloadManager.PreloadItem> = LongSparseArray(
             initialCapacity = 0
         ),
@@ -525,12 +578,36 @@ class FeedViewModel(
         val isLoading = loading != null
 
         /**
-         * The feed without the hidden seen items, if the user hides seen items.
+         * True, if this feed shows the uploads or collections of the user. Those are never hidden.
          */
-        val visibleFeed: Feed
-            get() = if (showSeen || hiddenSeenIds.isEmpty()) feed
-            else feed.copy(items = feed.filter { it.id !in hiddenSeenIds })
+        val isOwnFeed = ownUsername != null && ownUsername.equalsIgnoreCase(feed.filter.username)
+
+        val hidesSeenItems = !showSeen && !isOwnFeed
+
+        /**
+         * The feed without the hidden seen items. The grid, the search for the next
+         * item and the post pager all work on this feed.
+         */
+        val visibleFeed: Feed by lazy(LazyThreadSafetyMode.NONE) {
+            if (hidesSeenItems) feed.withoutItems(hiddenSeenIds) else feed
+        }
     }
+
+    companion object {
+        /**
+         * Load more pages, if fewer items are visible.
+         */
+        private const val MIN_VISIBLE_ITEMS = 48
+    }
+}
+
+/**
+ * Maximum number of pages to load in a row, because all their items are hidden.
+ */
+internal const val MAX_AUTO_LOADS_IN_ROW = 5
+
+internal fun Feed.withoutItems(ids: Set<Long>): Feed {
+    return if (ids.isEmpty()) this else copy(items = items.filter { it.id !in ids })
 }
 
 /**

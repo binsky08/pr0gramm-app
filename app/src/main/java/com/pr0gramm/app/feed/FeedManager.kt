@@ -52,31 +52,35 @@ class FeedManager(private val scope: CoroutineScope, private val feedService: Fe
     }
 
     /**
-     * Load the next page of the feed
+     * Load the next page of the feed. Returns false, if there is nothing to load.
      */
-    fun next() {
+    fun next(): Boolean {
         val oldest = feed.oldestNonPlaceholderItem
         if (feed.isAtEnd || isLoading || oldest == null)
-            return
+            return false
 
         load {
             publish(Update.LoadingStarted(LoadingSpace.NEXT))
             feedService.load(feedQuery().copy(older = oldest.id(feedType)))
         }
+
+        return true
     }
 
     /**
-     * Load the previous page of the feed
+     * Load the previous page of the feed. Returns false, if there is nothing to load.
      */
-    fun previous() {
+    fun previous(): Boolean {
         val newest = feed.newestNonPlaceholderItem
         if (feed.isAtStart || isLoading || newest == null)
-            return
+            return false
 
         load {
             publish(Update.LoadingStarted(LoadingSpace.PREV))
             feedService.load(feedQuery().copy(newer = newest.id(feedType)))
         }
+
+        return true
     }
 
     fun stop() {

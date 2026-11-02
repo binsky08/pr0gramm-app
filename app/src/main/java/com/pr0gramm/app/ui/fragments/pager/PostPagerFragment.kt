@@ -47,10 +47,13 @@ class PostPagerFragment : BaseFragment("PostPagerFragment", R.layout.fragment_po
         // get the feed to show and setup a loader to load more data
         val feed = requireArguments().getParcelableOrThrow<Feed.FeedParcel>(ARG_FEED).feed
         val startItem = requireArguments().getParcelableOrThrow<FeedItem>(ARG_START_ITEM)
+        val hiddenSeenIds = requireArguments().getLongArray(ARG_HIDDEN_SEEN_IDS)
 
         PostPagerViewModel(
-                savedState = PostPagerViewModel.SavedState(savedState, feed, startItem),
+                savedState = PostPagerViewModel.SavedState(savedState, feed, startItem, hiddenSeenIds ?: LongArray(0)),
                 feedService = instance(),
+                seenService = instance(),
+                hideSeenItems = hiddenSeenIds != null,
         )
     }
 
@@ -91,7 +94,7 @@ class PostPagerFragment : BaseFragment("PostPagerFragment", R.layout.fragment_po
         launchInViewScope {
             model.state.collect { state ->
                 logger.debug { "Update state: $state" }
-                adapter.feed = state.feed
+                adapter.feed = state.visibleFeed
             }
         }
 
@@ -164,9 +167,9 @@ class PostPagerFragment : BaseFragment("PostPagerFragment", R.layout.fragment_po
         val target = targetFragment as? FeedFragment
 
         // merge the updated feed back into our parent fragment.
-        val feed = model.state.value.feed
-        if (target != null && model.currentItem.id in feed) {
-            target.updateFeedItemTarget(feed, model.currentItem)
+        val state = model.state.value
+        if (target != null && model.currentItem.id in state.feed) {
+            target.updateFeedItemTarget(state.feed, state.hiddenSeenIds, model.currentItem)
         }
 
         super.onStop()
@@ -302,10 +305,15 @@ class PostPagerFragment : BaseFragment("PostPagerFragment", R.layout.fragment_po
         private const val ARG_TITLE = "PP.title"
         private const val ARG_START_ITEM = "PP.startItem"
         private const val ARG_START_ITEM_COMMENT_REF = "PP.startItemComment"
+        private const val ARG_HIDDEN_SEEN_IDS = "PP.hiddenSeenIds"
 
-        fun newInstance(feed: Feed, idx: Int, commentRef: CommentRef?, fragmentTitle: String?): PostPagerFragment {
+        /**
+         * Pass [hiddenSeenIds] to hide seen items the same way as the feed does, or null to show all items.
+         */
+        fun newInstance(feed: Feed, idx: Int, hiddenSeenIds: Set<Long>?, commentRef: CommentRef?, fragmentTitle: String?): PostPagerFragment {
             return PostPagerFragment().arguments {
                 putParcelable(ARG_FEED, feed.parcelAround(idx))
+                putLongArray(ARG_HIDDEN_SEEN_IDS, hiddenSeenIds?.toLongArray())
                 putParcelable(ARG_START_ITEM, feed[idx])
                 putParcelable(ARG_START_ITEM_COMMENT_REF, commentRef)
                 putString(ARG_TITLE, fragmentTitle)
